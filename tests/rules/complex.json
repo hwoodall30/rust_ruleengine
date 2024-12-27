@@ -1,0 +1,35 @@
+{
+	"conditions": [
+		{
+			"property": "color",
+			"operator": "!equals",
+			"value": "Black"
+		},
+		{
+			"property": "is_in_stock",
+			"operator": "equals",
+			"value": "1"
+		},
+		{
+			"property": "brand",
+			"operator": "equals",
+			"value": "ARMANI EXCHANGE"
+		},
+		{
+			"property": "is_on_sale",
+			"operator": "equals",
+			"value": "1"
+		},
+		{
+			"property": "product_types",
+			"operator": "contains",
+			"value": "Woman"
+		},
+		{
+			"property": "product_types",
+			"operator": "contains",
+			"value": "Shoes"
+		}
+	],
+	"logic": "And"
+}
