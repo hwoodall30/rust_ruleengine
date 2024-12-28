@@ -26,8 +26,8 @@ fn main() {
         };
 
     let filter_params = FilterFnParams {
-        items: &items,     // Borrowed from the explicitly stored `items`
-        context: &context, // Borrowed from the explicitly stored `context`
+        items: &items,
+        context: &context,
         threshold: None,
     };
 
