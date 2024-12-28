@@ -3,7 +3,7 @@
 		{
 			"property": "color",
 			"operator": "!equals",
-			"value": "Black"
+			"variable": "color"
 		},
 		{
 			"property": "is_in_stock",
