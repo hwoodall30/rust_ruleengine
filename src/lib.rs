@@ -38,7 +38,7 @@ impl Condition {
         params
             .items
             .iter()
-            .filter_map(|item| match self.evaluate(&item, &params.context) {
+            .filter_map(|item| match self.evaluate(item, params.context) {
                 Ok(true) => Some(Ok(item)),
                 Ok(false) => None,
                 Err(e) => Some(Err(e)),
@@ -53,7 +53,7 @@ impl Condition {
         params
             .items
             .par_iter()
-            .filter_map(|item| match self.evaluate(&item, &params.context) {
+            .filter_map(|item| match self.evaluate(item, params.context) {
                 Ok(true) => Some(Ok(item)),
                 Ok(false) => None,
                 Err(e) => Some(Err(e)),
@@ -65,7 +65,7 @@ impl Condition {
         &self,
         params: &'a FilterFnParams,
     ) -> Result<Vec<&'a Value>, String> {
-        if params.items.len() <= params.threshold.unwrap_or(1000) {
+        if params.items.len() <= params.threshold.unwrap_or(20000) {
             return self.filter(params);
         } else {
             return self.parallel_filter(params);
@@ -75,30 +75,38 @@ impl Condition {
     #[inline]
     fn evaluate(&self, item: &Value, context: &Value) -> Result<bool, String> {
         if let Some(property) = &self.property {
+            let comparison_value = if let Some(variable) = &self.variable {
+                context
+                    .get(variable.as_ref())
+                    .ok_or("Error getting context value")?
+            } else {
+                self.value.as_ref().ok_or("Error getting value")?
+            };
+
+            if comparison_value == "*" {
+                return Ok(true);
+            }
+
             let item_value_option = item.get(property.as_ref());
             if item_value_option.is_none() {
                 return Ok(false);
             }
 
-            let item_value = item_value_option.unwrap();
-            if item_value == "*" {
-                return Ok(true);
-            }
+            let item_value = item_value_option.ok_or("Error getting item value")?;
 
             let func = self.get_cached_operator_fn()?;
 
-            if !func(item_value, self.value.as_ref().unwrap())? {
+            if !func(item_value, comparison_value)? {
                 return Ok(false);
             }
         }
 
-        // Handle sub-conditions if present
         if let Some(sub_conditions) = &self.conditions {
             if !sub_conditions.is_empty() {
                 match self.logic {
-                    Some(Logic::And) => return self.satisfies_all(&item, &context),
-                    Some(Logic::Or) => return self.satisfies_any(&item, &context),
-                    None => return self.satisfies_all(&item, &context),
+                    Some(Logic::And) => return self.satisfies_all(item, context),
+                    Some(Logic::Or) => return self.satisfies_any(item, context),
+                    None => return self.satisfies_all(item, context),
                 }
             }
         }
