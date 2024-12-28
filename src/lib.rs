@@ -106,6 +106,7 @@ impl Condition {
         return Ok(true);
     }
 
+    #[inline]
     fn satisfies_all(&self, item: &Value, context: &Value) -> Result<bool, String> {
         let conditions = self.conditions.as_ref().ok_or("Error with conditions")?;
 
@@ -117,6 +118,7 @@ impl Condition {
         Ok(true)
     }
 
+    #[inline]
     fn satisfies_any(&self, item: &Value, context: &Value) -> Result<bool, String> {
         let conditions = self.conditions.as_ref().ok_or("Error with conditions")?;
 
