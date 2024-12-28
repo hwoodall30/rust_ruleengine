@@ -2,7 +2,7 @@ pub mod utils {
     pub mod read_json;
 }
 
-use rust_ruleengine::Condition;
+use rust_ruleengine::{Condition, FilterFnParams};
 use std::time::Instant;
 use utils::read_json::read_json_file_streaming;
 
@@ -25,12 +25,18 @@ fn main() {
             Err(err) => panic!("{}", err),
         };
 
+    let filter_params = FilterFnParams {
+        items: &items,     // Borrowed from the explicitly stored `items`
+        context: &context, // Borrowed from the explicitly stored `context`
+        threshold: None,
+    };
+
     // Warmup runs
     for _ in 0..100 {
-        let _ = condition.filter(&items, &context);
+        let _ = condition.adaptive_filter(&filter_params);
     }
 
-    let filtered_results = condition.filter(&items, &context);
+    let filtered_results = condition.adaptive_filter(&filter_params);
     match filtered_results {
         Ok(items) => println!("Filtered items: {:?}", &items.len()),
         Err(err) => panic!("{}", err),
@@ -41,7 +47,7 @@ fn main() {
     let start = Instant::now();
 
     for _ in 0..iterations {
-        let _ = condition.filter(&items, &context);
+        let _ = condition.adaptive_filter(&filter_params);
     }
     let duration = start.elapsed();
     println!("Average duration: {:?}", duration / iterations as u32);
