@@ -3,9 +3,10 @@ pub mod utils {
     pub mod read_json;
 }
 
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::cell::RefCell;
+use std::sync::RwLock;
 
 #[derive(Debug, Deserialize, Serialize)]
 pub enum Logic {
@@ -23,23 +24,52 @@ pub struct Condition {
     pub conditions: Option<Box<[Condition]>>,
 
     #[serde(skip)]
-    pub operator_fn: RefCell<Option<operators::ComparisonFn>>,
+    operator_fn: RwLock<Option<operators::ComparisonFn>>,
+}
+
+pub struct FilterFnParams<'a> {
+    pub items: &'a [Value],
+    pub context: &'a Value,
+    pub threshold: Option<usize>,
 }
 
 impl Condition {
-    pub fn filter<'a>(
-        &self,
-        items: &'a [Value],
-        context: &Value,
-    ) -> Result<Vec<&'a Value>, String> {
-        items
+    pub fn filter<'a>(&self, params: &'a FilterFnParams) -> Result<Vec<&'a Value>, String> {
+        params
+            .items
             .iter()
-            .filter_map(|item| match self.evaluate(&item, &context) {
+            .filter_map(|item| match self.evaluate(&item, &params.context) {
                 Ok(true) => Some(Ok(item)),
                 Ok(false) => None,
                 Err(e) => Some(Err(e)),
             })
             .collect()
+    }
+
+    pub fn parallel_filter<'a>(
+        &self,
+        params: &'a FilterFnParams,
+    ) -> Result<Vec<&'a Value>, String> {
+        params
+            .items
+            .par_iter()
+            .filter_map(|item| match self.evaluate(&item, &params.context) {
+                Ok(true) => Some(Ok(item)),
+                Ok(false) => None,
+                Err(e) => Some(Err(e)),
+            })
+            .collect()
+    }
+
+    pub fn adaptive_filter<'a>(
+        &self,
+        params: &'a FilterFnParams,
+    ) -> Result<Vec<&'a Value>, String> {
+        if params.items.len() <= params.threshold.unwrap_or(1000) {
+            return self.filter(params);
+        } else {
+            return self.parallel_filter(params);
+        }
     }
 
     #[inline]
@@ -55,7 +85,7 @@ impl Condition {
                 return Ok(true);
             }
 
-            let func = self.get_operator_func()?;
+            let func = self.get_cached_operator_fn()?;
 
             if !func(item_value, self.value.as_ref().unwrap())? {
                 return Ok(false);
@@ -77,32 +107,43 @@ impl Condition {
     }
 
     fn satisfies_all(&self, item: &Value, context: &Value) -> Result<bool, String> {
-        self.conditions
-            .as_ref()
-            .ok_or("Error with conditions")?
-            .iter()
-            .try_fold(true, |acc, condition| {
-                Ok(acc && condition.evaluate(item, context)?)
-            })
+        let conditions = self.conditions.as_ref().ok_or("Error with conditions")?;
+
+        for condition in conditions.iter() {
+            if !condition.evaluate(item, context)? {
+                return Ok(false);
+            }
+        }
+        Ok(true)
     }
 
     fn satisfies_any(&self, item: &Value, context: &Value) -> Result<bool, String> {
-        self.conditions
-            .as_ref()
-            .ok_or("Error with conditions")?
-            .iter()
-            .try_fold(false, |acc, condition| {
-                Ok(acc || condition.evaluate(item, context)?)
-            })
+        let conditions = self.conditions.as_ref().ok_or("Error with conditions")?;
+
+        for condition in conditions.iter() {
+            if condition.evaluate(item, context)? {
+                return Ok(true);
+            }
+        }
+        Ok(false)
     }
 
     #[inline]
-    fn get_operator_func(&self) -> Result<operators::ComparisonFn, String> {
-        if self.operator_fn.borrow().is_none() {
+    fn get_cached_operator_fn(&self) -> Result<operators::ComparisonFn, String> {
+        {
+            let guard = self.operator_fn.read().map_err(|_| "RwLock poisoned")?;
+            if let Some(func) = *guard {
+                return Ok(func);
+            }
+        }
+
+        let mut guard = self.operator_fn.write().map_err(|_| "RwLock poisoned")?;
+        if guard.is_none() {
             let operator = self.operator.as_ref().ok_or("Operator is required")?;
             let func = operators::get_operator_fn(operator).ok_or("Operator not found")?;
-            *self.operator_fn.borrow_mut() = Some(func);
+            *guard = Some(func);
         }
-        Ok(self.operator_fn.borrow().unwrap())
+
+        Ok(guard.as_ref().unwrap().clone())
     }
 }
