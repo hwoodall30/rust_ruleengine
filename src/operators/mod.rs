@@ -2,7 +2,7 @@ use std::{collections::HashMap, sync::OnceLock};
 
 use serde_json::Value;
 
-type ComparisonFn = fn(&Value, &Value) -> Result<bool, String>;
+pub type ComparisonFn = fn(&Value, &Value) -> Result<bool, String>;
 
 pub fn get_operator_map() -> &'static HashMap<&'static str, ComparisonFn> {
     static OPERATORS: OnceLock<HashMap<&'static str, ComparisonFn>> = OnceLock::new();
@@ -23,10 +23,12 @@ pub fn get_operator_map() -> &'static HashMap<&'static str, ComparisonFn> {
     })
 }
 
+#[inline]
 pub fn get_operator_fn(operator: &str) -> Option<ComparisonFn> {
     get_operator_map().get(operator).cloned()
 }
 
+#[inline]
 fn equals(item_value: &Value, value: &Value) -> Result<bool, String> {
     match (item_value, value) {
         (Value::String(item_str), Value::String(val_str)) => Ok(item_str == val_str),
@@ -38,10 +40,12 @@ fn equals(item_value: &Value, value: &Value) -> Result<bool, String> {
     }
 }
 
+#[inline]
 fn not_equals(item_value: &Value, value: &Value) -> Result<bool, String> {
     equals(item_value, value).map(|result| !result)
 }
 
+#[inline]
 pub fn greater_than(item_value: &Value, value: &Value) -> Result<bool, String> {
     match (item_value, value) {
         (Value::Number(item_num), Value::Number(val_num)) => {
@@ -53,6 +57,7 @@ pub fn greater_than(item_value: &Value, value: &Value) -> Result<bool, String> {
     }
 }
 
+#[inline]
 pub fn less_than(item_value: &Value, value: &Value) -> Result<bool, String> {
     match (item_value, value) {
         (Value::Number(item_num), Value::Number(val_num)) => {
@@ -64,6 +69,7 @@ pub fn less_than(item_value: &Value, value: &Value) -> Result<bool, String> {
     }
 }
 
+#[inline]
 pub fn greater_than_or_equal(item_value: &Value, value: &Value) -> Result<bool, String> {
     match (item_value, value) {
         (Value::Number(item_num), Value::Number(val_num)) => {
@@ -75,6 +81,7 @@ pub fn greater_than_or_equal(item_value: &Value, value: &Value) -> Result<bool, 
     }
 }
 
+#[inline]
 pub fn less_than_or_equal(item_value: &Value, value: &Value) -> Result<bool, String> {
     match (item_value, value) {
         (Value::Number(item_num), Value::Number(val_num)) => {
@@ -86,6 +93,7 @@ pub fn less_than_or_equal(item_value: &Value, value: &Value) -> Result<bool, Str
     }
 }
 
+#[inline]
 pub fn contains(item_value: &Value, value: &Value) -> Result<bool, String> {
     match (item_value, value) {
         (Value::String(item_str), Value::String(val_str)) => Ok(item_str.contains(val_str)),
@@ -96,6 +104,7 @@ pub fn contains(item_value: &Value, value: &Value) -> Result<bool, String> {
     }
 }
 
+#[inline]
 pub fn not_contains(item_value: &Value, value: &Value) -> Result<bool, String> {
     contains(item_value, value).map(|result| !result)
 }
