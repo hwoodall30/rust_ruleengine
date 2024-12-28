@@ -5,8 +5,9 @@ pub mod utils {
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::cell::RefCell;
 
-#[derive(Debug, Deserialize, Serialize, Clone)]
+#[derive(Debug, Deserialize, Serialize)]
 pub enum Logic {
     And,
     Or,
@@ -14,12 +15,15 @@ pub enum Logic {
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Condition {
-    pub operator: Option<String>,
-    pub property: Option<String>,
-    pub value: Option<Value>,
-    pub variable: Option<String>,
+    pub operator: Option<Box<str>>,
+    pub property: Option<Box<str>>,
+    pub value: Option<Box<Value>>,
+    pub variable: Option<Box<str>>,
     pub logic: Option<Logic>,
-    pub conditions: Option<Vec<Condition>>,
+    pub conditions: Option<Box<[Condition]>>,
+
+    #[serde(skip)]
+    pub operator_fn: RefCell<Option<operators::ComparisonFn>>,
 }
 
 impl Condition {
@@ -38,9 +42,10 @@ impl Condition {
             .collect()
     }
 
+    #[inline]
     fn evaluate(&self, item: &Value, context: &Value) -> Result<bool, String> {
         if let Some(property) = &self.property {
-            let item_value_option = item.get(property);
+            let item_value_option = item.get(property.as_ref());
             if item_value_option.is_none() {
                 return Ok(false);
             }
@@ -50,13 +55,7 @@ impl Condition {
                 return Ok(true);
             }
 
-            let operator = self
-                .operator
-                .as_ref()
-                .ok_or("Operator is required")?
-                .as_str();
-
-            let func = operators::get_operator_fn(operator).ok_or("Operator not found")?;
+            let func = self.get_operator_func()?;
 
             if !func(item_value, self.value.as_ref().unwrap())? {
                 return Ok(false);
@@ -95,5 +94,15 @@ impl Condition {
             .try_fold(false, |acc, condition| {
                 Ok(acc || condition.evaluate(item, context)?)
             })
+    }
+
+    #[inline]
+    fn get_operator_func(&self) -> Result<operators::ComparisonFn, String> {
+        if self.operator_fn.borrow().is_none() {
+            let operator = self.operator.as_ref().ok_or("Operator is required")?;
+            let func = operators::get_operator_fn(operator).ok_or("Operator not found")?;
+            *self.operator_fn.borrow_mut() = Some(func);
+        }
+        Ok(self.operator_fn.borrow().unwrap())
     }
 }
