@@ -1,12 +1,13 @@
 pub mod operators;
 pub mod utils {
-    pub mod read_json;
+    pub mod get_object_value;
 }
 
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::RwLock;
+use utils::get_object_value::get_object_value;
 
 #[derive(Debug, Deserialize, Serialize)]
 pub enum Logic {
@@ -76,23 +77,19 @@ impl Condition {
     fn evaluate(&self, item: &Value, context: &Value) -> Result<bool, String> {
         if let Some(property) = &self.property {
             let comparison_value = if let Some(variable) = &self.variable {
-                context
-                    .get(variable.as_ref())
-                    .ok_or("Error getting context value")?
+                get_object_value(context, variable.as_ref())?
             } else {
-                self.value.as_ref().ok_or("Error getting value")?
+                self.value
+                    .as_ref()
+                    .map(|v| v.as_ref())
+                    .ok_or("Error getting value")?
             };
 
             if comparison_value == "*" {
                 return Ok(true);
             }
 
-            let item_value_option = item.get(property.as_ref());
-            if item_value_option.is_none() {
-                return Ok(false);
-            }
-
-            let item_value = item_value_option.ok_or("Error getting item value")?;
+            let item_value = get_object_value(item, property.as_ref())?;
 
             let func = self.get_cached_operator_fn()?;
 
@@ -119,8 +116,9 @@ impl Condition {
         let conditions = self.conditions.as_ref().ok_or("Error with conditions")?;
 
         for condition in conditions.iter() {
-            if !condition.evaluate(item, context)? {
-                return Ok(false);
+            match condition.evaluate(item, context) {
+                Ok(true) => {}
+                _ => return Ok(false),
             }
         }
         Ok(true)
@@ -131,8 +129,9 @@ impl Condition {
         let conditions = self.conditions.as_ref().ok_or("Error with conditions")?;
 
         for condition in conditions.iter() {
-            if condition.evaluate(item, context)? {
-                return Ok(true);
+            match condition.evaluate(item, context) {
+                Ok(true) => return Ok(true),
+                _ => return Ok(false),
             }
         }
         Ok(false)
